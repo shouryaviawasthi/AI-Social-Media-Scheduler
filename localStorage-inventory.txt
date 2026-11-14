@@ -1,0 +1,209 @@
+LOCALSTORAGE INVENTORY
+======================
+
+Source:
+client/src/lib/storage.ts
+
+1. LOCALSTORAGE KEYS
+--------------------
+
+scheduler_users
+Contains an array of all locally created users:
+User[]
+
+scheduler_current_user
+Contains the current local user:
+User | null
+
+This key is removed when the user logs out.
+
+scheduler_data_<userId>
+A dynamic key created for each user, for example:
+scheduler_data_abc123
+
+Each dynamic key contains a UserState object with accounts, posts, and activities.
+
+
+2. DATA STORED BY EACH KEY
+---------------------------
+
+Each scheduler_data_<userId> value has this structure:
+
+{
+  accounts: SocialAccount[];
+  posts: SocialPost[];
+  activities: ActivityItem[];
+}
+
+All values are serialized using JSON.stringify before being written to localStorage.
+
+
+3. USER DATA STRUCTURE
+----------------------
+
+{
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  createdAt: string;
+}
+
+Important:
+The password is currently stored as plain text in localStorage. It must not be migrated as plain text into MongoDB.
+
+
+4. POST DATA STRUCTURE
+----------------------
+
+{
+  _id: string;
+  userId: string;
+  content: string;
+  platforms: string[];
+  scheduledFor?: string;
+  status: "scheduled" | "published";
+  mediaType?: string;
+  mediaUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+Posts represent both scheduled and published social media content.
+
+
+5. ACTIVITY DATA STRUCTURE
+--------------------------
+
+{
+  _id: string;
+  userId: string;
+  actionType: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+  relatedPost?: {
+    _id: string;
+    content: string;
+  } | null;
+}
+
+Typical activity types include:
+
+POST_SCHEDULED
+POST_PUBLISHED
+
+
+6. SCHEDULER DATA
+-----------------
+
+There is no separate scheduler localStorage key.
+
+Scheduler data is stored inside:
+
+scheduler_data_<userId>
+
+The posts array contains scheduler information such as:
+
+- scheduledFor
+- status
+- platforms
+- content
+- mediaType
+- mediaUrl
+- createdAt
+- updatedAt
+
+The client automatically changes scheduled posts to published when their scheduled time has passed.
+
+
+7. FAKE SOCIAL-ACCOUNT DATA
+----------------------------
+
+Fake social accounts are stored inside:
+
+scheduler_data_<userId>
+
+Each locally generated account has this structure:
+
+{
+  _id: string;
+  userId: string;
+  platform: string;
+  handle: string;
+  status: "connected" | "disconnected";
+  createdAt: string;
+  updatedAt: string;
+}
+
+The handle is generated locally using this format:
+
+<username>-<platform>
+
+These fake accounts do not contain:
+
+- Real OAuth account IDs
+- Access tokens
+- Refresh tokens
+- Real platform credentials
+
+
+8. DATA THAT NEEDS TO BE MIGRATED TO MONGODB
+--------------------------------------------
+
+scheduler_users
+Migrate user records to the PortalUser collection.
+
+User name and email
+Migrate to PortalUser.name and PortalUser.email.
+
+User password
+Do not migrate the plain-text password. Require users to set a new password, or hash the password securely before migration.
+
+scheduler_current_user
+Do not migrate this key. Replace it with the server-side session cookie and Session collection.
+
+Posts
+Migrate the posts array to a MongoDB Post collection/model.
+
+Activities
+Migrate the activities array to a MongoDB Activity collection/model.
+
+Fake social accounts
+Usually discard these records and require users to reconnect their social accounts through OAuth.
+
+Real account metadata
+If real account data is available, migrate the metadata to the existing SocialAccount collection. OAuth tokens must be encrypted securely.
+
+Media data
+Migrate mediaUrl and related metadata to a proper media storage service or store only the media metadata in MongoDB.
+
+Scheduled post data
+Migrate scheduledFor, status, platforms, content, and media fields to MongoDB Post documents. Scheduling and publishing should eventually be handled by a server-side scheduler or worker.
+
+
+CURRENT SERVER MODEL STATUS
+---------------------------
+
+The server already has models for:
+
+- PortalUser
+- Session
+- SocialAccount
+
+The server still needs MongoDB models and routes for:
+
+- Posts
+- Activities
+
+
+SUMMARY
+-------
+
+The localStorage data consists of:
+
+1. A local user database.
+2. A current-user snapshot.
+3. Per-user accounts, posts, and activities.
+
+For production, authentication, users, posts, activities, and real social-account data should be managed by the server and MongoDB instead of localStorage.
